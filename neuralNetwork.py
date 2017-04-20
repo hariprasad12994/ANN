@@ -1,0 +1,379 @@
+import sys
+import numpy as np
+from sklearn import datasets
+from scipy import optimize
+import pylab
+from matplotlib import pyplot as plt
+
+
+class NeuralNetwork(object):
+    def __init__(self, data_set, hidden_layer_size, depth, output_data, weight_decay):
+
+        self.input_data = data_set
+        self.output_data = output_data
+
+        self.number_of_training_data = data_set.shape[0]
+
+        self.input_layer_size = data_set.shape[1]
+        self.output_layer_size = output_data.shape[1]
+        self.hidden_layer_size = hidden_layer_size
+        self.number_of_layers = depth + 2
+        self.depth = depth
+
+        self.weight_decay = weight_decay
+
+        self.total_number_of_nodes = 0
+        self.weight_topology = []
+        self.node_output_topology = []
+
+        self.activated_outputs = []
+        self.sum_of_weighted_inputs = []
+        self.weights = []
+        self.delta = []
+        self.gradients = []
+
+        self.yHat = np.array([])
+
+        self.defineArchitecture()
+
+    def defineArchitecture(self):
+
+        self.total_number_of_nodes = self.input_layer_size + self.hidden_layer_size * self.depth + \
+                                     self.output_layer_size
+
+        self.weight_topology.append((self.input_layer_size * self.hidden_layer_size,
+                                     (self.input_layer_size, self.hidden_layer_size)))
+        for i in list(range(0, self.depth - 1)):
+            self.weight_topology.append((self.hidden_layer_size * self.hidden_layer_size,
+                                         (self.hidden_layer_size, self.hidden_layer_size)))
+        self.weight_topology.append((self.hidden_layer_size * self.output_layer_size,
+                                     (self.hidden_layer_size, self.output_layer_size)))
+
+        for i in self.weight_topology:
+            self.weights.append(np.random.rand(i[0]))
+            self.gradients.append(np.zeros(i[0]))
+
+        count = 0
+        for i in self.weights:
+            self.weights[count] = np.reshape(self.weights[count], self.weight_topology[count][1])
+            self.gradients[count] = np.reshape(self.gradients[count], self.weight_topology[count][1])
+            count += 1
+
+        self.weights = np.array(self.weights)
+        self.gradients = np.array(self.gradients)
+
+        self.node_output_topology.append((self.number_of_training_data * self.input_layer_size,
+                                          (self.number_of_training_data, self.input_layer_size)))
+        for i in list(range(0, self.depth)):
+            self.node_output_topology.append((self.number_of_training_data * self.hidden_layer_size,
+                                              (self.number_of_training_data, self.hidden_layer_size)))
+
+        self.node_output_topology.append((self.output_layer_size * self.number_of_training_data,
+                                          (self.number_of_training_data, self.output_layer_size)))
+
+        for i in self.node_output_topology:
+            self.sum_of_weighted_inputs.append(np.ones(i[0]))
+            self.activated_outputs.append(np.ones(i[0]))
+            self.delta.append(np.ones(i[0]))
+
+        self.sum_of_weighted_inputs = np.array(self.sum_of_weighted_inputs)
+        self.activated_outputs = np.array(self.activated_outputs)
+        self.delta = np.array(self.delta)
+
+        count = 0
+        for i in self.sum_of_weighted_inputs:
+            self.sum_of_weighted_inputs[count] = np.reshape(self.sum_of_weighted_inputs[count],
+                                                            self.node_output_topology[count][1])
+            self.activated_outputs[count] = np.reshape(self.activated_outputs[count],
+                                                       self.node_output_topology[count][1])
+            self.delta[count] = np.reshape(self.delta[count],
+                                           self.node_output_topology[count][1])
+            count += 1
+
+    def sigmoid(self, z):
+        return 1 / (1 + np.exp(-z))
+
+    def sigmoidPrime(self, z):
+        # Gradient of sigmoid
+        return np.exp(-z) / ((1 + np.exp(-z)) ** 2)
+
+    def getArchitecture(self):
+        print("number_of_training_data = ", self.number_of_training_data)
+        print("input_layer_size =  ", self.input_layer_size)
+        print("output_layer_size = ", self.output_layer_size)
+        print("hidden_layer_size = ", self.hidden_layer_size)
+        print("weight_decay = ", self.weight_decay)
+        print("number_of_layers = ", self.number_of_layers)
+        print("depth = ", self.depth)
+
+        print("total_number_of_nodes = ", self.total_number_of_nodes)
+        print("weight_topology = ", self.weight_topology)
+        print("node_output_topology = ", self.node_output_topology)
+
+    def feedForward(self, weights, sum_of_weighted_inputs, activated_outputs):
+        activated_outputs[0] = self.input_data
+        for layer in list(range(1, self.number_of_layers)):
+            sum_of_weighted_inputs[layer] = np.dot(activated_outputs[layer - 1], weights[layer - 1])
+            activated_outputs[layer] = self.sigmoid(sum_of_weighted_inputs[layer])
+        self.yHat = activated_outputs[-1]
+
+    def costFunction(self, y):
+        self.feedForward(self.weights, self.sum_of_weighted_inputs, self.activated_outputs)
+        # j = sum(0.5 * sum((y - self.yHat) ** 2))
+        # print(j)
+
+        # Todo: Use logarithmic cost function since parabolic cost functions may have convexity problems
+        first_part_of_cost = np.sum((y) * np.log(self.yHat))
+        second_part_of_cost = np.sum((1.0 - y) * (np.log(1 - self.yHat)))
+        #
+        # print(first_part_of_cost)
+        # print(second_part_of_cost)
+        #
+        # weights = np.array([])
+        # count = 0
+        # for i in self.weights:
+        #     weights = np.append(weights, self.weights[count].flatten())
+        #     count += 1
+
+        # regularization_term = (self.weight_decay / (2.0 * self.number_of_training_data)) * \
+        #                       np.sum(np.power(weights, 2))
+
+        j = ((-(1.0 / self.number_of_training_data)) * np.sum((first_part_of_cost + second_part_of_cost)))
+        #                                           + regularization_term
+
+        return j
+
+    def calcGradients(self, y):
+        self.delta[self.number_of_layers - 1] = (self.yHat - y)  # * \
+        # self.sigmoidPrime(
+        #     self.sum_of_weighted_inputs[self.number_of_layers - 1])
+
+        for layer in range(self.number_of_layers - 2, 0, -1):
+            # self.delta[layer] = np.dot(self.delta[layer + 1], self.weights[layer].T) * \
+            #                     self.sigmoidPrime(self.sum_of_weighted_inputs[layer])
+
+            self.delta[layer] = np.dot(self.delta[layer + 1], self.weights[layer].T) * \
+                                (self.activated_outputs[layer] * (1 - self.activated_outputs[layer]))
+
+        for layer in list(range(0, self.number_of_layers - 1)):
+            self.gradients[layer] = np.dot(self.activated_outputs[layer].T, self.delta[layer + 1])
+
+        self.gradients /= self.number_of_training_data
+
+        # print("Gradients:\n", self.gradients)
+
+        dJdW = np.array([])
+        for i in range(len(self.gradients)):
+            dJdW = np.append(dJdW, self.gradients[i].flatten())
+
+        # print("Flatten\n", dJdW)
+
+        return dJdW
+
+    def getWeights(self):
+        params = np.array([])
+        for i in range(len(self.weights)):
+            params = np.append(params, self.weights[i].flatten())
+        return params
+
+    def setWeights(self, params):
+        count = 0
+        for p in range(len(self.weights)):
+            for q in range(len((self.weights[p]))):
+                for r in range(len((self.weights[p][q]))):
+                    # print(p,q,r,params[count])
+                    self.weights[p][q][r] = params[count]
+                    count += 1
+
+    def calcNumericalGradients(self, y):
+        epsilon = 1e-4
+        weights0 = self.weights
+        numerical_gradient = self.weights * 0
+
+        for p in range(len(weights0)):
+            for q in range(len((weights0[p]))):
+                for r in range(len((weights0[p][q]))):
+                    original_weights = weights0[p][q][r]
+
+                    weights0[p][q][r] += epsilon
+
+                    activated_outputs0 = self.activated_outputs * 0
+                    sum_of_weighted_inputs0 = self.sum_of_weighted_inputs * 0
+                    self.feedForward(weights0, activated_outputs0, sum_of_weighted_inputs0)
+                    loss2 = self.costFunction(y)
+
+                    weights0[p][q][r] = original_weights
+
+                    weights0[p][q][r] -= epsilon
+
+                    activated_outputs0 = self.activated_outputs * 0
+                    sum_of_weighted_inputs0 = self.sum_of_weighted_inputs * 0
+                    self.feedForward(weights0, activated_outputs0, sum_of_weighted_inputs0)
+                    loss1 = self.costFunction(y)
+
+                    numerical_gradient[p][q][r] = (loss2 - loss1) / (2 * epsilon)
+
+                    weights0[p][q][r] = original_weights
+
+        print("Numerical Gradients:\n", numerical_gradient)
+
+
+class Trainer(object):
+    def __init__(self, neural_network, X, y):
+        # Make Local reference to network:
+        self.neural_network = neural_network
+        self.J = []
+        self.X = X
+        self.y = y
+        self.optimizationResults = []
+
+    def callbackFunction(self, params):
+        self.neural_network.setWeights(params)
+        self.J.append(self.neural_network.costFunction(self.y))
+
+    def costFunctionWrapper(self, params, X, y):
+        self.neural_network.setWeights(params)
+        cost = self.neural_network.costFunction(y)
+        grad = self.neural_network.calcGradients(y)
+        return cost, grad
+
+    def train(self, X, y):
+        params0 = self.neural_network.getWeights()
+
+        options = {'maxiter': 2000, 'disp': True}
+        _res = optimize.minimize(self.costFunctionWrapper, params0, jac=True, method='BFGS', \
+                                 args=(X, y), options=options, callback=self.callbackFunction)
+
+        self.neural_network.setWeights(_res.x)
+        self.optimizationResults = _res
+        # print(_res.x)
+
+
+def main():
+    weight_decay = int(sys.argv[1])
+    depth = int(sys.argv[2])
+    hidden_layer_size = int(sys.argv[3])
+
+    iris = datasets.load_iris()
+    features = iris.data[:, :4]
+    features /= 100
+    for i in list(range(0,features.shape[1])):
+        features[:,i] = (features[:,i]-np.min(features[:,i]))/(np.max(features[:,i])-np.min(features[:,i]))
+    target = iris.target
+    # print(target)
+    # print(target.shape)
+    # output_labels = len(set(iris.target))
+    y = target+1
+    # y = []
+    print(y)
+    # for i in target:
+    #     if i == 0:
+    #         y.append([1, 0, 0])
+    #     elif i == 1:
+    #         y.append([0, 1, 0])
+    #     else:
+    #         y.append([0, 0, 1])
+    y = np.array(y, dtype=float)
+    # y = np.array(target, dtype=float)
+    print(y)
+    y = np.reshape(y,(150,1))
+    y /= 10
+
+    # features = np.array(([3, 4], [5, 1], [10, 2]))
+    # output_labels = 1
+    # y = np.array(([75], [82], [93]), dtype=float)
+    # y /= 100
+
+    # features = np.array(([0, 0], [0, 1], [1, 0], [1, 1]))
+    # y = np.array(([0], [1], [1], [0]), dtype=float)
+
+    neuralNetwork = NeuralNetwork(features, hidden_layer_size, depth, y, weight_decay)
+
+    neuralNetwork.getArchitecture()
+
+    print(features)
+    #
+    print("Weights before training:\n", neuralNetwork.weights)
+
+    trainer = Trainer(neuralNetwork, features, y)
+
+    trainer.train(features, y)
+
+    print("Cost function optimisation:\n", trainer.J)
+
+    # plt.plot(trainer.J)
+    # plt.grid(1)
+    # plt.ylabel('cost function')
+    # plt.xlabel('iterations')
+    # pylab.show()
+
+    print("Weights after training:\n", neuralNetwork.weights)
+    #
+    neuralNetwork.feedForward(neuralNetwork.weights, neuralNetwork.sum_of_weighted_inputs,
+                              neuralNetwork.activated_outputs)
+    #
+    print("Expected output:\n", y)
+
+    print("Output after training\n", neuralNetwork.activated_outputs[-1])
+
+    a = neuralNetwork.activated_outputs[-1]
+
+    print("A-Y\n", np.abs(a-y))
+
+    print("Avg. error = ",np.sum(a-y)/y.shape[0])
+
+
+
+    # print(a[:,0])
+    # print(a[:,1])
+    # print(a[:,2])
+    # print(y[:,0])
+    # print(y[:,1])
+    # print(y[:,2])
+
+    plt.plot(y)
+    plt.plot(a)
+    plt.plot(np.abs(a-y))
+    plt.grid(1)
+    plt.ylabel('y_values')
+    plt.xlabel('no_of_data')
+    pylab.show()
+
+    # plt.plot(y[:, 1])
+    # plt.plot(a[:, 1])
+    # plt.grid(1)
+    # plt.ylabel('y_values')
+    # plt.xlabel('no_of_data')
+    # pylab.show()
+
+    # plt.plot(y[:, 2])
+    # plt.plot(a[:, 2])
+    # plt.grid(1)
+    # plt.ylabel('y_values')
+    # plt.xlabel('no_of_data')
+    # pylab.show()
+
+
+    # print("Output-Input\n", neuralNetwork.activated_outputs[-1] - y)
+
+
+    # yHat = neuralNetwork.feedForward(neuralNetwork.weights, neuralNetwork.sum_of_weighted_inputs,
+    #                                  neuralNetwork.activated_outputs)
+
+    # j = neuralNetwork.costFunction(y)
+
+    # neuralNetwork.calcGradients(y)
+
+    # neuralNetwork.calcNumericalGradients(y)
+    #
+    # neuralNetwork.getWeights()
+
+    # a = np.random.randn(9)
+    # print(a)
+    # neuralNetwork.setWeights(a)
+    # print(neuralNetwork.weights)
+    # neuralNetwork.getWeights()
+
+
+if __name__ == '__main__':
+    main()
