@@ -1,4 +1,5 @@
 import sys
+import time
 
 import numpy as np
 from sklearn import datasets
@@ -34,6 +35,11 @@ def test_iris():
     y = np.array(y, dtype=float)
     y /= 10
 
+    # features = np.array(([3, 4], [5, 1], [10, 2]))
+    # output_labels = 1
+    # y = np.array(([75], [82], [93]), dtype=float)
+    # y /= 100
+
     neuralNetwork = NeuralNetwork(features, hidden_layer_size, depth, y, weight_decay)
 
     neuralNetwork.getArchitecture()
@@ -44,7 +50,11 @@ def test_iris():
 
     trainer = Trainer(neuralNetwork, features, y)
 
+    t0 = time.perf_counter()
+
     trainer.train(features, y)
+
+    t1 = time.perf_counter()
 
     print("Cost function optimisation:\n", trainer.J)
 
@@ -91,14 +101,26 @@ def test_iris():
 
     plt.show()
 
-    print("Output-Input\n", neuralNetwork.activated_outputs[-1] - y)
+    print("Time taken = ", t1 - t0)
+
+    # print("Output-Input\n", neuralNetwork.activated_outputs[-1] - y)
 
     # j = neuralNetwork.costFunction(y)
 
     # neuralNetwork.calcGradients(y)
-
+    #
     # neuralNetwork.calcNumericalGradients(y)
-
+    #
+    # print("Before setting\n", neuralNetwork.weights)
+    #
+    # print(np.ones(56).shape)
+    #
+    # t0 = time.perf_counter()
+    # neuralNetwork.setWeights(np.ones(56))
+    # t1 = time.perf_counter()
+    #
+    # print("After setting\n", neuralNetwork.weights)
+    # print("Time taken = ", t1-t0)
 
 if __name__ == test_iris():
     test_iris()

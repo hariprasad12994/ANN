@@ -120,6 +120,8 @@ class NeuralNetwork(object):
 
         # Todo: Use logarithmic cost function since parabolic cost functions may have convexity problems
         first_part_of_cost = np.sum((y) * np.log(self.yHat))
+        # k = np.isnan(np.log(self.yHat))
+        # print(k)
         second_part_of_cost = np.sum((1.0 - y) * (np.log(1 - self.yHat)))
 
         # print(first_part_of_cost)
@@ -174,12 +176,13 @@ class NeuralNetwork(object):
 
     def setWeights(self, params):
         count = 0
-        for p in range(len(self.weights)):
-            for q in range(len((self.weights[p]))):
-                for r in range(len((self.weights[p][q]))):
-                    # print(p,q,r,params[count])
-                    self.weights[p][q][r] = params[count]
-                    count += 1
+        offset = 0
+        for number_of_nodes, connections in self.weight_topology:
+            k = params[offset: offset + number_of_nodes]
+            k = np.reshape(k, connections)
+            self.weights[count] = k
+            count += 1
+            offset = number_of_nodes
 
     def calcNumericalGradients(self, y):
         epsilon = 1e-4
