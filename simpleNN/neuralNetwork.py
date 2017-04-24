@@ -1,5 +1,7 @@
 import numpy as np
 from scipy import optimize
+import time
+from ..helpers.helpers import soft_plus,soft_max
 
 
 class NeuralNetwork(object):
@@ -27,6 +29,8 @@ class NeuralNetwork(object):
         self.weights = []
         self.delta = []
         self.gradients = []
+
+        self.training_iteration = 0
 
         self.yHat = np.array([])
 
@@ -93,6 +97,17 @@ class NeuralNetwork(object):
         # Gradient of sigmoid
         return np.exp(-z) / ((1 + np.exp(-z)) ** 2)
 
+    def hyberbolic_tangent(self,z):
+        return np.tanh(z)
+
+    def hyberbolic_tangent_prime(self, z):
+        # Gradient of sigmoid
+        return 1 - (z * z)
+
+    def hyberbolic_tangent_prime0(self, z):
+        # Gradient of sigmoid
+        return 1 - (np.tanh(z) * np.tanh(z))
+
     def getArchitecture(self):
         print("number_of_training_data = ", self.number_of_training_data)
         print("input_layer_size =  ", self.input_layer_size)
@@ -107,22 +122,50 @@ class NeuralNetwork(object):
         print("node_output_topology = ", self.node_output_topology)
 
     def feedForward(self, weights, sum_of_weighted_inputs, activated_outputs):
+        t0 = time.perf_counter()
         activated_outputs[0] = self.input_data
+        count = 0
         for layer in list(range(1, self.number_of_layers)):
             sum_of_weighted_inputs[layer] = np.dot(activated_outputs[layer - 1], weights[layer - 1])
+            # activated_outputs[layer] = self.hyberbolic_tangent(sum_of_weighted_inputs[layer])
             activated_outputs[layer] = self.sigmoid(sum_of_weighted_inputs[layer])
+            # activated_outputs[layer] = soft_plus(sum_of_weighted_inputs[layer])
+            count = layer
+        # print(activated_outputs)
+        # sum_of_weighted_inputs[-1] = np.dot(activated_outputs[count], weights[count])
+        # activated_outputs = soft_max(sum_of_weighted_inputs[-1])
         self.yHat = activated_outputs[-1]
+        t1 = time.perf_counter()
+        # print("Time taken for feed forward = ", t1-t0)
 
     def costFunction(self, y):
         self.feedForward(self.weights, self.sum_of_weighted_inputs, self.activated_outputs)
-        # j = sum(0.5 * sum((y - self.yHat) ** 2))
+        epsilon = 1e-100
+        j = sum(0.5 * sum((y - self.yHat) ** 2))
         # print(j)
 
+        # print("Training iteration = ", self.training_iteration)
+
         # Todo: Use logarithmic cost function since parabolic cost functions may have convexity problems
+        # print("Index in yHat with 0 = ", np.argwhere(self.yHat == 0).ravel())
         first_part_of_cost = np.sum((y) * np.log(self.yHat))
-        # k = np.isnan(np.log(self.yHat))
-        # print(k)
-        second_part_of_cost = np.sum((1.0 - y) * (np.log(1 - self.yHat)))
+
+        # print("Index in first part with nan = ", np.argwhere(np.isnan(first_part_of_cost)).ravel())
+
+        # for i in (np.argwhere(np.isnan(first_part_of_cost)).ravel()):
+        #     first_part_of_cost[i] = epsilon
+
+        k = 1 - self.yHat
+        # g = 1 - y
+        # print("Index in 1-y with 0 = ", np.argwhere(g == 0))
+        # print("Index in 1-yHat with 0 = ", np.argwhere(k == 0))
+
+        # for i in (np.argwhere(k == 0)):
+        #     k[i] = epsilon
+
+        second_part_of_cost = np.sum((1.0 - y) * (np.log(k)))
+
+        # print("Index in second part with nan = ", np.argwhere(np.isnan(second_part_of_cost)))
 
         # print(first_part_of_cost)
         # print(second_part_of_cost)
@@ -136,15 +179,26 @@ class NeuralNetwork(object):
         # regularization_term = (self.weight_decay / (2.0 * self.number_of_training_data)) * \
         #                       np.sum(np.power(weights, 2))
 
-        j = ((-(1.0 / self.number_of_training_data)) * np.sum((first_part_of_cost + second_part_of_cost)))
+        # j = ((-(1.0 / self.number_of_training_data)) * np.sum((first_part_of_cost + second_part_of_cost)))
         #                                           + regularization_term
+
+        # print("Cost = ", j, "\n")
+
+        self.training_iteration += 1
 
         return j
 
     def calcGradients(self, y):
-        self.delta[self.number_of_layers - 1] = (self.yHat - y)  # * \
-        # self.sigmoidPrime(
-        #     self.sum_of_weighted_inputs[self.number_of_layers - 1])
+        t0 = time.perf_counter()
+        self.delta[self.number_of_layers - 1] = (self.yHat - y)
+        # self.delta[self.number_of_layers - 1] = (self.yHat - y)
+        # self.delta[self.number_of_layers - 1] = (self.yHat - y) * (1 - (self.yHat * self.yHat))
+        # self.delta[self.number_of_layers - 1] = (self.yHat - y) * (self.yHat * (1 - self.yHat))
+                                                  # self.sigmoidPrime(
+                                                  # self.sum_of_weighted_inputs[self.number_of_layers - 1])
+        # self.delta[self.number_of_layers - 1] = (self.yHat - y) * \
+        #                                           self.hyberbolic_tangent_prime0(
+        #                                           self.sum_of_weighted_inputs[self.number_of_layers - 1])
 
         for layer in range(self.number_of_layers - 2, 0, -1):
             # self.delta[layer] = np.dot(self.delta[layer + 1], self.weights[layer].T) * \
@@ -153,12 +207,27 @@ class NeuralNetwork(object):
             self.delta[layer] = np.dot(self.delta[layer + 1], self.weights[layer].T) * \
                                 (self.activated_outputs[layer] * (1 - self.activated_outputs[layer]))
 
+            # self.delta[layer] = np.dot(self.delta[layer + 1], self.weights[layer].T) * \
+            #                     (1 - self.activated_outputs[layer] * self.activated_outputs[layer])
+
+            # self.delta[layer] = np.dot(self.delta[layer + 1], self.weights[layer].T) * \
+            #                     (self.sigmoid(self.sum_of_weighted_inputs[layer]))
+
         for layer in list(range(0, self.number_of_layers - 1)):
             self.gradients[layer] = np.dot(self.activated_outputs[layer].T, self.delta[layer + 1])
 
-        self.gradients /= self.number_of_training_data
+        # for i in self.gradients:
+        #     i /= self.number_of_training_data
+
+        # self.gradients /= self.number_of_training_data
+
+        # self.gradients *= 2
+
+        t1 = time.perf_counter()
+        # print("Time taken for gradient calc = ", t1-t0)
 
         # print("Gradients:\n", self.gradients)
+        # print("Gradients:\n", self.gradients*2)
 
         dJdW = np.array([])
         for i in range(len(self.gradients)):
@@ -240,15 +309,8 @@ class Trainer(object):
         params0 = self.neural_network.getWeights()
 
         options = {'maxiter': 2000, 'disp': True}
-        _res = optimize.minimize(self.costFunctionWrapper, params0, jac=True, method='BFGS', \
+        _res = optimize.minimize(self.costFunctionWrapper, params0, jac=True, method='BFGS',
                                  args=(X, y), options=options, callback=self.callbackFunction)
 
         self.neural_network.setWeights(_res.x)
         self.optimizationResults = _res
-        # print(_res.x)
-
-
-    # features = np.array(([3, 4], [5, 1], [10, 2]))
-    # output_labels = 1
-    # y = np.array(([75], [82], [93]), dtype=float)
-    # y /= 100
